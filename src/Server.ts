@@ -1,9 +1,9 @@
 import { createSocket, RemoteInfo } from "dgram";
-import { IQueryRequest } from "./interfaces/server/IQueryRequest";
-import { createZeroedBuffer, sliceBits, writeNumberToBuffer } from "./server/Utils";
+import { createZeroedBuffer } from "./server/Utils";
 import { BlockList } from "./BlockList";
-import { DNSclient } from "./DNSClient";
-import winston = require("winston");
+import { DNSclient } from "./dns/DNSClient";
+import * as winston from "winston";
+import { Dominion as Dominion } from "./App";
 
 export const QueryTypes = {
     1: "A",
@@ -25,16 +25,11 @@ export const QueryTypes = {
     255: "*"
 } as const;
 
-export class Server {
+export class DNSServer {
     /**
      * The UDP socket.
      */
     private server = createSocket("udp4");
-
-    /**
-     * The block list class.
-     */
-    private blockList = new BlockList(this);
 
     /**
      * The DNS client that will respond to the requests.
@@ -42,29 +37,25 @@ export class Server {
     public dnsClient: DNSclient;
 
     public logger = winston.createLogger({
+        level: this.app.isDebug ? "debug" : "info",
         transports: new winston.transports.Console({
             format: winston.format.combine(
+                winston.format.label({ label: "server" }),
                 winston.format.colorize(),
                 winston.format.timestamp(),
                 winston.format.splat(),
                 winston.format.simple()
             )
         })
-    })
+    });
 
     constructor(
-        protected options: {
-            resolver: [string, string]
-        } = {
-            resolver: ["1.1.1.1", "1.1.0.0"]
-        }
+        protected app: Dominion
     ) {
         this.logger.info("server is initializing...");
 
-        this.blockList.load();
-
         this.dnsClient = new DNSclient({
-            servers: options.resolver
+            servers: app.options.dns.resolvers
         });
 
         // Create an event listener for all received messages
@@ -78,9 +69,12 @@ export class Server {
      */
     public listen(port: number) {
         return new Promise<void>((resolve, reject) => {
+            this.server.once("error", reject);
+
             this.server.bind(port, "0.0.0.0", () => {
+                this.server.removeListener("error", reject);
                 resolve();
-            })
+            });
         });
     }
 
@@ -103,10 +97,7 @@ export class Server {
             0,
             q.length,
             rInfo.port,
-            rInfo.address,
-            function(err, sent) {
-            
-            }
+            rInfo.address
         );
     }
 
@@ -122,7 +113,9 @@ export class Server {
         const domainBuff = req.slice(12, req.length - 4);
         const domainName = this.queryNameToDomain(domainBuff);
 
-        if (this.blockList.contains(domainName)) {
+        this.logger.debug("received request to domain %s", domainName);
+
+        if (this.app.blockList.contains(domainName)) {
             this.logger.info("blocking domain %s", domainName);
             return this.makeRefusedResponse(req);
         }

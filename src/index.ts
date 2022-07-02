@@ -1,8 +1,4 @@
-import { Server } from "./Server";
+import { Dominion } from "./App";
 
-const server = new Server();
-
-server.listen(53)
-.then(() => {
-    server.logger.info("listening on port 53")
-});
+const app = new Dominion();
+app.start();

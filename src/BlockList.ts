@@ -1,11 +1,25 @@
 import { readdirSync, readFileSync } from "fs";
 import path = require("path");
-import { Server } from "./Server";
+import { Dominion } from "./App";
+import AdsList from "./data/lists/blocklists/ads";
+import AnalyticsList from "./data/lists/blocklists/analytics";
+import { IList, List } from "./dns/blocklist/List";
 
 export class BlockList {
+    /**
+     * Unsorted and unparsed lists.
+     */
     private static list: string[] = [];
 
-    constructor(protected server: Server) {
+    /**
+     * Parsed and sorted lists
+     */
+    private static parsedLists: List[] = [
+        AdsList,
+        AnalyticsList
+    ];
+
+    constructor(protected app: Dominion) {
 
     }
 
@@ -14,9 +28,11 @@ export class BlockList {
      */
     public load() {
         const dir = path.resolve(
-            process.cwd(),
+            this.app.rootDir,
             "lists"
         );
+        
+        this.app.logger.info("loading block lists from \"%s\"...", dir);
 
         readdirSync(dir, {
             withFileTypes: true
@@ -26,20 +42,27 @@ export class BlockList {
             }
 
             const fileName = path.resolve(dir, file.name);
-            this.server.logger.debug("loading list file \"%s\"...", fileName);
+            this.app.logger.debug("loading list file \"%s\"...", fileName);
 
             const lines = readFileSync(fileName, "utf8")?.split("\n");
 
             for(let line of lines) {
-                if (BlockList.list.includes(line)) {
-                    continue;
-                }
-
                 BlockList.list.push(line.trim());
             }
         });
 
-        this.server.logger.info("block list has %d unique domain names", BlockList.list.length);
+        // Filter only block lists
+        BlockList.parsedLists
+            .filter((list) => list.hasBlocklist())
+            .forEach((list) => {
+                // Add them to the list
+                BlockList.list.push(...list.getBlockedDomains());
+            });
+
+        // Filter out duplicated
+        BlockList.list = BlockList.list.filter((item, index) => BlockList.list.indexOf(item) === index);
+
+        this.app.logger.info("block list has %d unique domain names", BlockList.list.length);
     }
 
     /**

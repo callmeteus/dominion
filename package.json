@@ -1,9 +1,9 @@
 {
-  "name": "foxxo",
+  "name": "dominion",
   "version": "1.0.0",
   "description": "A customizable DNS server written in node.js",
   "main": "dist/index.js",
-  "repository": "https://github.com/theprometeus/foxxo",
+  "repository": "https://github.com/theprometeus/dominion",
   "author": "Matheus Giovani",
   "license": "MIT",
   "private": false,
