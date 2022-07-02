@@ -1,0 +1,24 @@
+{
+  "name": "foxxo",
+  "version": "1.0.0",
+  "description": "A customizable DNS server written in node.js",
+  "main": "dist/index.js",
+  "repository": "https://github.com/theprometeus/foxxo",
+  "author": "Matheus Giovani",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "watch": "ts-node-dev --watch -r tsconfig-paths/register src/index.ts"
+  },
+  "dependencies": {
+    "winston": "^3.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "ts-node": "^10.8.1",
+    "ts-node-dev": "^2.0.0",
+    "tsc": "^2.0.4",
+    "tsconfig-paths": "^4.0.0",
+    "typescript": "^4.7.4"
+  }
+}
