@@ -1,5 +1,16 @@
 {
     "compilerOptions": {
-        "allowJs": false
+        "allowJs": false,
+        "module": "commonjs",
+        "resolveJsonModule": true,
+        "outDir": "./dist",
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "target": "es6",
+        "declaration": true,
+        "declarationDir": "./types/",
+        "skipLibCheck": true
     },
+    "include": ["./src/**/*.ts"],
+    "exclude": ["node_modules/**/*"]
 }

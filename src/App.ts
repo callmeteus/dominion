@@ -1,13 +1,16 @@
-import * as fs from "fs";
-import * as https from "https";
 import * as path from "path";
 import * as winston from "winston";
 
-import { BlockList } from "./BlockList";
+import { Sequelize } from "sequelize-typescript";
+
+import { BlocklistUpdater } from "./BlocklistUpdater";
 import { DNSServer } from "./Server";
+import { List } from "./database/List";
+import { Dashboard } from "./dashboard/Dashboard";
 
 interface IOptions {
     port: number;
+    dashboardPort?: number;
     dns: {
         resolvers: string[]
     }
@@ -15,6 +18,7 @@ interface IOptions {
 
 const defaultOptions: IOptions = {
     port: 53,
+    dashboardPort: 18000,
     dns: {
         resolvers: ["1.1.1.1"]
     }
@@ -32,11 +36,6 @@ export class Dominion {
     public server: DNSServer;
 
     /**
-     * The block list handler.
-     */
-    public blockList: BlockList;
-
-    /**
      * If the application is in debug mode.
      */
     public isDebug = process.env.NODE_ENV !== "production";
@@ -49,10 +48,15 @@ export class Dominion {
                 winston.format.colorize(),
                 winston.format.timestamp(),
                 winston.format.splat(),
-                winston.format.simple()
+                winston.format.simple(),
+                winston.format.printf(({ level, message, label, timestamp }) => {
+                    return `[${timestamp}] ${label} ${level}: ${message}`;
+                })
             )
         })
     });
+
+    public database: Sequelize;
 
     constructor(
         public options?: IOptions
@@ -63,7 +67,6 @@ export class Dominion {
             this.options = Object.assign({}, defaultOptions, options);
         }
 
-        this.blockList = new BlockList(this);
         this.server = new DNSServer(this);
     }
 
@@ -74,71 +77,44 @@ export class Dominion {
     public async start() {
         this.logger.info("dominion is starting up...");
 
-        await this.updateExternalLists();
-
-        this.blockList.load();
-
+        await this.initDatabase();
         await this.server.listen(this.options.port);
 
         this.logger.info("server is listening on port %d", this.options.port);
+
+        // Initialize the dashboard
+        Dashboard(this);
+
+        // Update the blocklist
+        new BlocklistUpdater(this).load();
     }
 
     /**
-     * Downloads a single file.
-     * @param url The file URL.
-     * @param targetFile The target file location.
-     * @returns 
+     * Initializes the database
      */
-    private downloadFile(url: string, targetFile: string) {
-        return new Promise<void>((resolve, reject) => {
-            https.get(url, response => {
-                const code = response.statusCode ?? 0;
+    public async initDatabase() {
+        this.logger.info("starting up the database...");
 
-                if (code >= 400) {
-                    return reject(new Error(response.statusMessage));
-                }
-    
-                // handle redirects
-                if (code > 300 && code < 400 && !!response.headers.location) {
-                    return this.downloadFile(response.headers.location, targetFile);
-                }
+        this.database = new Sequelize({
+            dialect: "sqlite",
+            storage: path.resolve(this.rootDir, "data", "database.data"),
+            logging: false,
+            models: [
+                List
+            ]
+        });
 
-                // save the file to disk
-                const fileWriter = fs
-                    .createWriteStream(targetFile)
-                    .on("finish", () => {
-                        resolve()
-                    });
-            
-                response.pipe(fileWriter);
-            })
-            .on("error", error => {
-              reject(error)
-            })
-        })
-    }
+        this.logger.info("upgrading the database...");
 
-    /**
-     * Updates all external lists.
-     */
-    public async updateExternalLists() {
-        this.logger.info("updating external lists...");
-
-        const externalLists = [
-            "https://raw.githubusercontent.com/justdomains/blocklists/master/lists/nocoin-justdomains.txt",
-            "https://raw.githubusercontent.com/justdomains/blocklists/master/lists/easyprivacy-justdomains.txt",
-            "https://raw.githubusercontent.com/justdomains/blocklists/master/lists/easylist-justdomains.txt",
-            "https://raw.githubusercontent.com/justdomains/blocklists/master/lists/adguarddns-justdomains.txt"
-        ];
-
-        // Iterate over all external lists
-        for(let source of externalLists) {
-            // Download it
-            const fileName = path.basename(source);
-
-            this.logger.info("updating list \"%s\" from \"%s\"...", fileName, source);
-
-            await this.downloadFile(source, path.resolve(this.rootDir, "lists", fileName));
+        try {
+            await this.database.sync({
+                alter: this.isDebug,
+                logging: (log) => this.logger.debug(log)
+            });
+        } catch(e) {
+            this.logger.error("an exception ocurred while upgrading the database:\n%O", e);
         }
+
+        this.logger.info("database has been started");
     }
 }

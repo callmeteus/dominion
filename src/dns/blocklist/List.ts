@@ -7,6 +7,11 @@ export enum EItemCategory {
     OEM = "OEM"
 }
 
+export enum EItemType {
+    BLOCK = "BLOCK",
+    ALLOW = "ALLOW"
+}
+
 export interface IListItem {
     title?: string;
     domains: string | string[];
@@ -18,7 +23,7 @@ export interface IList {
     whitelist?: IListItem[];
 }
 
-export class List {
+export class InternalList {
     constructor(
         protected list: IList
     ) {
@@ -89,5 +94,5 @@ export class List {
 }
 
 export function defineList(list: IList) {
-    return new List(list);
+    return new InternalList(list);
 }

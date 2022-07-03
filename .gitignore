@@ -1,2 +1,7 @@
 lists/*
 node_modules/
+*.log
+data/
+dist/
+types/
+noco.db

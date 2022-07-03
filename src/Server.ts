@@ -1,9 +1,9 @@
 import { createSocket, RemoteInfo } from "dgram";
 import { createZeroedBuffer } from "./server/Utils";
-import { BlockList } from "./BlockList";
 import { DNSclient } from "./dns/DNSClient";
 import * as winston from "winston";
-import { Dominion as Dominion } from "./App";
+import { Dominion } from "./App";
+import { List } from "./database/List";
 
 export const QueryTypes = {
     1: "A",
@@ -44,7 +44,10 @@ export class DNSServer {
                 winston.format.colorize(),
                 winston.format.timestamp(),
                 winston.format.splat(),
-                winston.format.simple()
+                winston.format.simple(),
+                winston.format.printf(({ level, message, label, timestamp }) => {
+                    return `[${timestamp}] ${label} ${level}: ${message}`;
+                })
             )
         })
     });
@@ -109,13 +112,13 @@ export class DNSServer {
      * @param req The request buffer.
      * @returns 
      */
-    private processRequest(req: Buffer) {
-        const domainBuff = req.slice(12, req.length - 4);
+    private async processRequest(req: Buffer) {
+        const domainBuff = req.subarray(12, req.length - 4);
         const domainName = this.queryNameToDomain(domainBuff);
 
         this.logger.debug("received request to domain %s", domainName);
 
-        if (this.app.blockList.contains(domainName)) {
+        if (await List.isDomainBlocked(domainName)) {
             this.logger.info("blocking domain %s", domainName);
             return this.makeRefusedResponse(req);
         }
